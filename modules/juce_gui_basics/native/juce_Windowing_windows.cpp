@@ -1480,7 +1480,11 @@ public:
         currentTouches.deleteAllTouchesForPeer (this);
 
         // Destroy the window from the message thread
-        callFunctionIfNotLocked (&destroyWindowCallback, this);
+        DestroyWindowDetails destroyDetails;
+        destroyDetails._this = this;
+        destroyDetails.hParentWnd = parentToAddTo;
+        destroyDetails.mustEnableParentWindow = mustDisableOwner;
+        callFunctionIfNotLocked (&destroyWindowCallback, (void*) &destroyDetails);
 
         // And one last little bit of cleanup
         if (dropTarget != nullptr)
@@ -2230,6 +2234,7 @@ public:
 
 private:
     HWND hwnd, parentToAddTo;
+    bool mustDisableOwner = false;
     std::unique_ptr<DropShadower> shadower;
     uint32 lastPaintTime = 0;
     ULONGLONG lastMagnifySize = 0;
@@ -2408,6 +2413,7 @@ private:
         {
             if (titled || usesDropShadow)
             {
+                mustDisableOwner = true;
                 type |= usesDropShadow ? WS_CAPTION : 0;
                 type |= titled ? (WS_OVERLAPPED | WS_CAPTION) : WS_POPUP;
                 type |= hasClose ? (WS_SYSMENU | WS_CAPTION) : 0;
@@ -2464,6 +2470,11 @@ private:
             SetWindowLongPtr (hwnd, 8, (LONG_PTR) this);
             JuceWindowIdentifier::setAsJUCEWindow (hwnd, true);
 
+            if (mustDisableOwner)
+            {
+                EnableWindow(parentToAddTo, false);
+            }
+
             if (dropTarget == nullptr)
             {
                 HWNDComponentPeer* peer = nullptr;
@@ -2509,13 +2520,21 @@ private:
 
     static BOOL CALLBACK revokeChildDragDropCallback (HWND hwnd, LPARAM)    { RevokeDragDrop (hwnd); return TRUE; }
 
+    struct DestroyWindowDetails {
+        HWNDComponentPeer* _this;
+        HWND hParentWnd;
+        bool mustEnableParentWindow;
+    };
+
     static void* destroyWindowCallback (void* userData)
     {
-        static_cast<HWNDComponentPeer*> (userData)->destroyWindowOnMessageThread();
+        DestroyWindowDetails* details = static_cast<DestroyWindowDetails*> (userData);
+
+        details->_this->destroyWindowOnMessageThread(details);
         return nullptr;
     }
 
-    void destroyWindowOnMessageThread() noexcept
+    void destroyWindowOnMessageThread(DestroyWindowDetails* details) noexcept
     {
         if (IsWindow (hwnd))
         {
@@ -2523,6 +2542,13 @@ private:
 
             // NB: we need to do this before DestroyWindow() as child HWNDs will be invalid after
             EnumChildWindows (hwnd, revokeChildDragDropCallback, 0);
+
+            // NB: we need to do this right before DestroyWindow() otherwise some other window than
+            // our parent will get the focus because our parent is then still disabled
+            if (details->mustEnableParentWindow && details->hParentWnd != nullptr)
+            {
+                EnableWindow(details->hParentWnd, true);
+            }
 
             DestroyWindow (hwnd);
         }
