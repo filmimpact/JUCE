@@ -2445,9 +2445,12 @@ private:
                 // the top corners of the window will get rounded unconditionally.
                 // Unfortunately, this disables nice mouse handling for the caption area.
                 type |= WS_POPUP;
+                exstyle |= WS_EX_TOOLWINDOW; // Added, to prevent popup menu windows from appearing on the taskbar
             }
 
-            exstyle |= appearsOnTaskbar ? WS_EX_APPWINDOW : WS_EX_TOOLWINDOW;
+            // 0 was: WS_EX_TOOLWINDOW, prob. intended by Juce to hide the window on the taskbar, but that causes our modified version of normal dialog windows which have a title bar to have a size offset which Juce can't deal with properly
+            exstyle |= appearsOnTaskbar ? WS_EX_APPWINDOW : 0;
+
         }
 
         hwnd = CreateWindowEx (exstyle, WindowClassHolder::getInstance()->getWindowClassName(),
