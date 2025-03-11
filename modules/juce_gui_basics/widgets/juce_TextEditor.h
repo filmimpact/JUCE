@@ -32,6 +32,10 @@
   ==============================================================================
 */
 
+// Addition: predefine our class in the global namespace so Juce knows who to
+// friend later on
+class C_RichTextEditor;
+
 namespace juce
 {
 
@@ -50,6 +54,10 @@ class JUCE_API  TextEditor  : public TextInputTarget,
                               public Component,
                               public SettableTooltipClient
 {
+    // Addition: ensure our rich text editor class can also access TextEditor's internals
+    // it's the only way it can access the used font styles
+    friend C_RichTextEditor;
+
 public:
     //==============================================================================
     /** Creates a new, empty text editor.
