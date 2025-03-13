@@ -145,7 +145,9 @@ private:
      bool isSystemRandom = false;
     #endif
 
-    JUCE_LEAK_DETECTOR (Random)
+    // FIX: They have a thread_local Random in Random::getSystemRandom,
+    // which leaks of course.
+    //JUCE_LEAK_DETECTOR (Random)
 };
 
 } // namespace juce
