@@ -407,6 +407,27 @@ static void loadDPIAwarenessFunctions()
    #endif
 }
 
+#if JUCE_WIN_PER_MONITOR_DPI_AWARE
+class DLLDPIPerMonitorAwarenessContextEnabler {
+public:
+    DLLDPIPerMonitorAwarenessContextEnabler() {
+        if (!JUCEApplicationBase::isStandaloneApp() && setThreadDPIAwarenessContext != nullptr) {
+            oldContext = setThreadDPIAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+            if (oldContext == NULL)
+                oldContext = setThreadDPIAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE);
+        }
+    }
+
+    ~DLLDPIPerMonitorAwarenessContextEnabler() {
+        if (oldContext != NULL)
+            setThreadDPIAwarenessContext(oldContext);
+    }
+
+private:
+    DPI_AWARENESS_CONTEXT oldContext = NULL;
+};
+#endif
+
 static void setDPIAwareness()
 {
     if (hasCheckedForDPIAwareness)
@@ -414,10 +435,10 @@ static void setDPIAwareness()
 
     hasCheckedForDPIAwareness = true;
 
+    loadDPIAwarenessFunctions();
+
     if (! JUCEApplicationBase::isStandaloneApp())
         return;
-
-    loadDPIAwarenessFunctions();
 
     if (setProcessDPIAwarenessContext != nullptr
         && setProcessDPIAwarenessContext (DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2))
@@ -443,9 +464,6 @@ static bool isPerMonitorDPIAwareProcess()
     {
         setDPIAwareness();
 
-        if (! JUCEApplication::isStandaloneApp())
-            return false;
-
         if (getProcessDPIAwareness == nullptr)
             return false;
 
@@ -465,6 +483,7 @@ static bool isPerMonitorDPIAwareWindow ([[maybe_unused]] HWND nativeWindow)
     return false;
    #else
     setDPIAwareness();
+    DLLDPIPerMonitorAwarenessContextEnabler enabler;
 
     if (getWindowDPIAwarenessContext != nullptr
         && getAwarenessFromDPIAwarenessContext != nullptr)
@@ -484,6 +503,7 @@ static bool isPerMonitorDPIAwareThread (GetThreadDPIAwarenessContextFunc getThre
     return false;
    #else
     setDPIAwareness();
+    DLLDPIPerMonitorAwarenessContextEnabler enabler;
 
     if (getThreadDPIAwarenessContextIn != nullptr
         && getAwarenessFromDPIAwarenessContextIn != nullptr)
@@ -499,6 +519,7 @@ static bool isPerMonitorDPIAwareThread (GetThreadDPIAwarenessContextFunc getThre
 static double getGlobalDPI()
 {
     setDPIAwareness();
+    DLLDPIPerMonitorAwarenessContextEnabler enabler;
 
     ScopedDeviceContext deviceContext { nullptr };
     return (GetDeviceCaps (deviceContext.dc, LOGPIXELSX) + GetDeviceCaps (deviceContext.dc, LOGPIXELSY)) / 2.0;
@@ -755,8 +776,11 @@ RTL_OSVERSIONINFOW getWindowsVersionInfo();
 
 double Desktop::getDefaultMasterScale()
 {
-    if (! JUCEApplicationBase::isStandaloneApp() || isPerMonitorDPIAwareProcess())
+    if (isPerMonitorDPIAwareProcess())
         return 1.0;
+
+    setDPIAwareness();
+    DLLDPIPerMonitorAwarenessContextEnabler enabler;
 
     return getGlobalDPI() / USER_DEFAULT_SCREEN_DPI;
 }
@@ -2480,6 +2504,7 @@ private:
                 registerTouchWindow (hwnd, 0);
 
             setDPIAwareness();
+            DLLDPIPerMonitorAwarenessContextEnabler enabler;
 
             if (isPerMonitorDPIAwareThread())
                 scaleFactor = getScaleFactorForWindow (hwnd);
@@ -5915,6 +5940,7 @@ static BOOL CALLBACK enumMonitorsProc (HMONITOR hm, HDC, LPRECT, LPARAM userInfo
 void Displays::findDisplays (float masterScale)
 {
     setDPIAwareness();
+    DLLDPIPerMonitorAwarenessContextEnabler enabler;
 
     Array<MonitorInfo> monitors;
     EnumDisplayMonitors (nullptr, nullptr, &enumMonitorsProc, (LPARAM) &monitors);
